@@ -12,7 +12,7 @@ NOTES:
 emotion speech classification - doesnt seem to work as good, TRY *SPEECHBRAIN WAV2VEC2 CLASSIFEIR*!!    
 emotion video detection - seem to perform better than speech classification even on smaller models
 transcription using whisper works good, though its a bit slower (also zjisteni, whisper umi prekladat z aj do cj)
-HOW TO DETECT NEUTRAL EXPRESSIONS!!!???
+HOW TO DETECT NEUTRAL EXPRESSIONS!!!??
 
 TBD:
 more test videos
