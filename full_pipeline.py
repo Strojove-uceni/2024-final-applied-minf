@@ -7,11 +7,13 @@ import librosa
 import numpy as np
 import openai
 import torch
+from collections import Counter
+
 
 # Video and audio paths
 videos = [
-    {"video_path": "/home/katka/PycharmProjects/2024-final-applied-minf/videos/So Sorry.mp4",
-     "audio_output_path": "extracted_audio1.wav"},
+    {"video_path": "recorded_video_20241209_190556.mp4",
+     "audio_output_path": "recorded_audio_20241209_190556.wav"},
     {"video_path": "/home/katka/PycharmProjects/2024-final-applied-minf/videos/My Response.mp4",
      "audio_output_path": "extracted_audio2.wav"}
 ]
@@ -25,7 +27,6 @@ def extract_audio_from_video(video_path, output_path):
     except Exception as e:
         print(f"Error extracting audio: {e}")
 
-# Emotion Recognition
 def extract_emotion_from_video(video_path):
     frames = []
     video = VideoFileClip(video_path)
@@ -38,12 +39,16 @@ def extract_emotion_from_video(video_path):
         analysis = DeepFace.analyze(frame, actions=['emotion'], enforce_detection=False)
         if analysis:
             emotions.append(analysis[0]['dominant_emotion'])
-    return emotions
+    # Count the frequency of each emotion
+    emotion_counts = Counter(emotions)
+    # Get the 2 or 3 most common emotions
+    most_common_emotions = emotion_counts.most_common(3)
+    # Return only the emotion names
+    return [emotion for emotion, count in most_common_emotions]
 
 def extract_emotion_from_audio(audio_path):
     target_sample_rate = 16000
     audio_data, _ = librosa.load(audio_path, sr=target_sample_rate)
-    config = AutoConfig.from_pretrained("ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition")
     feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
         "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition")
     model = AutoModelForAudioClassification.from_pretrained("ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition")
@@ -96,21 +101,31 @@ def feed_to_LLM(conversation_context, emotions_from_video, emotions_from_audio, 
     Provide a compassionate and thoughtful response, offering insights and guidance. 
     The response should be no longer than two sentences of spoken word.
     """
+
+    print("\n", prompt, '\n')
+
     response = send_chat_completion(prompt, model)
     return response
 
-# Main Workflow
-conversation_context = ""
-for i, video in enumerate(videos):
+def pipeline_step(conversation_context, video):
     video_path = video["video_path"]
     audio_output_path = video["audio_output_path"]
 
-    print(f"Processing video {i + 1}...")
-    extract_audio_from_video(video_path, audio_output_path)
+    print(video_path)
+    print(audio_output_path)
+
+    print(f"Processing video...")
+    # extract_audio_from_video(video_path, audio_output_path)
     video_emotions = extract_emotion_from_video(video_path)
     audio_emotions = extract_emotion_from_audio(audio_output_path)
     transcription = get_transcription(audio_output_path)
 
     response = feed_to_LLM(conversation_context, video_emotions, audio_emotions, transcription)
-    conversation_context += f"\nVideo {i + 1} Analysis:\nResponse: {response}"
-    print(f"LLM Response for Video {i + 1}:\n{response}")
+    conversation_context += f"\nResponse: {response}"
+    print(f"LLM Response for Video:\n{response}")
+
+if __name__ == "__main__":
+    # Main Workflow
+    conversation_context = ""
+    for video in videos:
+        pipeline_step(conversation_context, video)
