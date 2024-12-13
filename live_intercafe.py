@@ -66,7 +66,8 @@ def show_video():
             if is_recording:
                 stop_recording(out)
                 out = None  # Reset VideoWriter object
-                process_data(video_filename, audio_filename)
+                process_data_thread = threading.Thread(target=process_data, args=(video_filename, audio_filename))
+                process_data_thread.start()
             else:
                 start_recording()
         elif key == ord('q'):
@@ -87,6 +88,7 @@ def stop_recording(out):
         out.release()  # Ensure video file is finalized properly
 
 def process_data(video_filename, audio_filename):
+    global status_message
     print("Processing the recorded video and audio...")
     video_data = {"video_path": video_filename, "audio_output_path": audio_filename}
     try:
