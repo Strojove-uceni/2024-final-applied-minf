@@ -123,6 +123,7 @@ def pipeline_step(conversation_context, video):
     response = feed_to_LLM(conversation_context, video_emotions, audio_emotions, transcription)
     conversation_context += f"\nResponse: {response}"
     print(f"LLM Response for Video:\n{response}")
+    return response
 
 if __name__ == "__main__":
     # Main Workflow

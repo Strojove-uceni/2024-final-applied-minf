@@ -1,5 +1,4 @@
 import os.path
-
 import cv2
 import threading
 import sounddevice as sd
@@ -13,13 +12,13 @@ is_recording = False
 conversation_context = ""
 video_filename = None
 audio_filename = None
+status_message = ""  # Message to display on the OpenCV window
 
 # Audio Recording Configuration
 audio_sample_rate = 16000
 audio_channels = 1
 audio_dtype = 'int16'
 
-# Audio Recording Function
 def record_audio(output_path):
     global is_recording, audio_frames
     audio_frames = []
@@ -33,79 +32,88 @@ def record_audio(output_path):
             while is_recording:
                 sd.sleep(100)
         sf.write(output_path, np.vstack(audio_frames), samplerate=audio_sample_rate, subtype='PCM_16')
-        print(f"Audio successfully saved to {output_path}")
     except Exception as e:
         print(f"Error during audio recording: {e}")
 
-# Video Recording Function
-def record_video(output_path):
-    global is_recording
+def show_video():
+    global is_recording, status_message, video_filename
     cap = cv2.VideoCapture(0)
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Compatible codec for mp4
-    out = cv2.VideoWriter(output_path, fourcc, 20.0, (640, 480))
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = None
 
-    while is_recording:
+    while True:
         ret, frame = cap.read()
-        if ret:
-            out.write(frame)
-            cv2.imshow('Recording', frame)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-        else:
+        if not ret:
             break
 
+        if is_recording:
+            if out is None:
+                # Ensure video writer is initialized only once during recording
+                out = cv2.VideoWriter(video_filename, fourcc, 20.0, (int(cap.get(3)), int(cap.get(4))))
+                if not out.isOpened():
+                    print("Error: VideoWriter could not be opened.")
+                    break
+            out.write(frame)
+
+        # Display status message on the video feed
+        if status_message:
+            cv2.putText(frame, status_message, (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+
+        cv2.imshow('Webcam', frame)
+
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('s'):
+            if is_recording:
+                stop_recording(out)
+                out = None  # Reset VideoWriter object
+                process_data(video_filename, audio_filename)
+            else:
+                start_recording()
+        elif key == ord('q'):
+            break
+
+    if out:
+        out.release()
     cap.release()
-    out.release()
     cv2.destroyAllWindows()
 
-# Live App Interface
-def live_app():
-    global is_recording, conversation_context, video_filename, audio_filename
-    print("Initializing live app...")
+def stop_recording(out):
+    global is_recording, status_message
+    is_recording = False
+    status_message = "Recording stopped, analyzing..."
+    print("Recording stopped.")
 
+    if out:
+        out.release()  # Ensure video file is finalized properly
+
+def process_data(video_filename, audio_filename):
+    print("Processing the recorded video and audio...")
+    video_data = {"video_path": video_filename, "audio_output_path": audio_filename}
+    try:
+        response = pipeline_step(conversation_context, video_data)
+        status_message = ""
+        print("Pipeline response:")
+        print(response)
+    except Exception as e:
+        print(f"Error during processing: {e}")
+
+def start_recording():
+    global is_recording, video_filename, audio_filename, status_message
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     video_filename = f"recorded_video_{timestamp}.mp4"
-    audio_filename = f"recorded_audio_{timestamp}.wav"  # todo - save more recordings
+    audio_filename = f"recorded_audio_{timestamp}.wav"
 
-    def start_recording():
-        global is_recording
-        is_recording = True
-        video_thread = threading.Thread(target=record_video, args=(video_filename,))
-        audio_thread = threading.Thread(target=record_audio, args=(audio_filename,))
-        video_thread.start()
-        audio_thread.start()
-        print("Recording started...")
+    is_recording = True
+    status_message = "Recording..."
+    audio_thread = threading.Thread(target=record_audio, args=(audio_filename,))
+    audio_thread.start()
+    print("Recording started...")
 
-    def stop_recording():
-        global is_recording
-        is_recording = False
-        print("Recording stopped.")
-        print("Processing the recorded video and audio...")
-        video_data = {"video_path": video_filename, "audio_output_path": audio_filename}
-        try:
-            import time
-            time.sleep(1)
-            print(os.path.exists(video_filename))
-            print(os.path.exists(audio_filename))
-            response = pipeline_step(conversation_context, video_data)
-            print("Pipeline response:")
-            print(response)
-        except Exception as e:
-            print(f"Error during processing: {e}")
+def live_app():
+    global is_recording, conversation_context, video_filename, audio_filename, status_message
 
-    print("Press 's' to start recording, 'q' to stop and process, 'e' to exit.")
-    while True:
-        command = input("Enter your command: ").strip().lower()
-        if command == 's':
-            start_recording()
-        elif command == 'q':
-            stop_recording()
-        elif command == 'e':
-            print("Exiting the app.")
-            break
-        else:
-            print("Invalid command. Please enter 's' to start, 'q' to stop, or 'e' to exit.")
+    print("Initializing live app...")
+    show_video()
 
-# Run the app
 if __name__ == "__main__":
     live_app()
