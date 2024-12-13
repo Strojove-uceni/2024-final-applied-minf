@@ -105,7 +105,7 @@ def feed_to_LLM(conversation_context, emotions_from_video, emotions_from_audio, 
     print("\n", prompt, '\n')
 
     response = send_chat_completion(prompt, model)
-    return response
+    return response, prompt
 
 def pipeline_step(conversation_context, video):
     video_path = video["video_path"]
@@ -120,13 +120,14 @@ def pipeline_step(conversation_context, video):
     audio_emotions = extract_emotion_from_audio(audio_output_path)
     transcription = get_transcription(audio_output_path)
 
-    response = feed_to_LLM(conversation_context, video_emotions, audio_emotions, transcription)
-    conversation_context += f"\nResponse: {response}"
-    print(f"LLM Response for Video:\n{response}")
-    return response
+    response, prompt = feed_to_LLM(conversation_context, video_emotions, audio_emotions, transcription)
+    return response, prompt
 
 if __name__ == "__main__":
     # Main Workflow
     conversation_context = ""
     for video in videos:
-        pipeline_step(conversation_context, video)
+        response, prompt = pipeline_step(conversation_context, video)
+        print(f"LLM Response for Video:\n{response}")
+        conversation_context += f"\nPrompt: {prompt}"
+        conversation_context += f"\nResponse: {response}"

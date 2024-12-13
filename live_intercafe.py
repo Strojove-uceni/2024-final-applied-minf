@@ -88,14 +88,16 @@ def stop_recording(out):
         out.release()  # Ensure video file is finalized properly
 
 def process_data(video_filename, audio_filename):
-    global status_message
+    global status_message, conversation_context
     print("Processing the recorded video and audio...")
     video_data = {"video_path": video_filename, "audio_output_path": audio_filename}
     try:
-        response = pipeline_step(conversation_context, video_data)
+        response, prompt = pipeline_step(conversation_context, video_data)
         status_message = ""
         print("Pipeline response:")
         print(response)
+        conversation_context += f"\nPrompt: {prompt}"
+        conversation_context += f"\nResponse: {response}"
     except Exception as e:
         print(f"Error during processing: {e}")
 
