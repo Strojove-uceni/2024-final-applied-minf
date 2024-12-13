@@ -4,7 +4,7 @@ import threading
 import sounddevice as sd
 import soundfile as sf
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 from full_pipeline import pipeline_step
 
 # Global Variables
@@ -13,11 +13,16 @@ conversation_context = ""
 video_filename = None
 audio_filename = None
 status_message = ""  # Message to display on the OpenCV window
+start_time = None  # Start time of the recording
 
-# Audio Recording Configuration
+# Recording Configuration
 audio_sample_rate = 16000
 audio_channels = 1
 audio_dtype = 'int16'
+recording_limit = 30  # Recording limit in seconds
+
+# Global Variables
+recording_thread = None  # Thread for audio recording
 
 def record_audio(output_path):
     global is_recording, audio_frames
@@ -36,24 +41,49 @@ def record_audio(output_path):
         print(f"Error during audio recording: {e}")
 
 def show_video():
-    global is_recording, status_message, video_filename
+    global is_recording, status_message, video_filename, start_time
     cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        print("Error: Webcam could not be opened.")
+        return
+
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = None
 
     while True:
         ret, frame = cap.read()
         if not ret:
+            print("Error: Could not read frame from webcam.")
             break
 
         if is_recording:
             if out is None:
-                # Ensure video writer is initialized only once during recording
-                out = cv2.VideoWriter(video_filename, fourcc, 20.0, (int(cap.get(3)), int(cap.get(4))))
-                if not out.isOpened():
-                    print("Error: VideoWriter could not be opened.")
+                try:
+                    out = cv2.VideoWriter(video_filename, fourcc, 20.0, (int(cap.get(3)), int(cap.get(4))))
+                    if not out.isOpened():
+                        print("Error: VideoWriter could not be opened.")
+                        break
+                except Exception as e:
+                    print(f"Error initializing VideoWriter: {e}")
                     break
-            out.write(frame)
+
+            try:
+                out.write(frame)
+            except Exception as e:
+                print(f"Error writing frame to VideoWriter: {e}")
+                break
+
+            elapsed_time = (datetime.now() - start_time).total_seconds()
+
+            if elapsed_time >= recording_limit:
+                stop_recording(out)
+                out = None  # Reset VideoWriter object
+                process_data_thread = threading.Thread(target=process_data, args=(video_filename, audio_filename))
+                process_data_thread.start()
+
+            # Display elapsed time and limit in the bottom-right corner
+            time_text = f"{int(elapsed_time)}s/{recording_limit}s"
+            cv2.putText(frame, time_text, (frame.shape[1] - 200, frame.shape[0] - 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
 
         # Display status message on the video feed
         if status_message:
@@ -74,7 +104,12 @@ def show_video():
             break
 
     if out:
-        out.release()
+        try:
+            out.release()
+            print("VideoWriter released successfully.")
+        except Exception as e:
+            print(f"Error releasing VideoWriter: {e}")
+
     cap.release()
     cv2.destroyAllWindows()
 
@@ -85,12 +120,24 @@ def stop_recording(out):
     print("Recording stopped.")
 
     if out:
-        out.release()  # Ensure video file is finalized properly
+        try:
+            out.release()  # Finalize video file
+            print(f"Video file '{video_filename}' finalized successfully.")
+        except Exception as e:
+            print(f"Error releasing VideoWriter: {e}")
+
 
 def process_data(video_filename, audio_filename):
     global status_message, conversation_context
     print("Processing the recorded video and audio...")
     video_data = {"video_path": video_filename, "audio_output_path": audio_filename}
+
+    # Check if video file exists and is non-empty
+    if not os.path.exists(video_filename) or os.path.getsize(video_filename) == 0:
+        print(f"Error: Video file '{video_filename}' is missing or corrupted.")
+        status_message = "Error: Video file is corrupted."
+        return
+
     try:
         response, prompt = pipeline_step(conversation_context, video_data)
         status_message = ""
@@ -101,16 +148,18 @@ def process_data(video_filename, audio_filename):
     except Exception as e:
         print(f"Error during processing: {e}")
 
+
 def start_recording():
-    global is_recording, video_filename, audio_filename, status_message
+    global is_recording, video_filename, audio_filename, status_message, start_time, recording_thread
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     video_filename = f"recorded_video_{timestamp}.mp4"
     audio_filename = f"recorded_audio_{timestamp}.wav"
 
     is_recording = True
     status_message = "Recording..."
-    audio_thread = threading.Thread(target=record_audio, args=(audio_filename,))
-    audio_thread.start()
+    start_time = datetime.now()
+    recording_thread = threading.Thread(target=record_audio, args=(audio_filename,))
+    recording_thread.start()
     print("Recording started...")
 
 def live_app():

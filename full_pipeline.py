@@ -20,9 +20,6 @@ if gpus:
         tf.config.experimental.set_memory_growth(gpu, True)
 from transformers import logging
 logging.set_verbosity_error()  # Suppress all warnings
-import os
-# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress TensorFlow logs (Error = 3)
-
 
 
 # Video and audio paths
