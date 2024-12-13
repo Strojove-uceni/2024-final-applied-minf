@@ -12,7 +12,7 @@ is_recording = False
 conversation_context = ""
 video_filename = None
 audio_filename = None
-status_message = ""  # Message to display on the OpenCV window
+status_message = "Press S and start talking"  # Message to display on the OpenCV window
 start_time = None  # Start time of the recording
 
 # Recording Configuration
@@ -22,7 +22,8 @@ audio_dtype = 'int16'
 recording_limit = 30  # Recording limit in seconds
 
 # Global Variables
-recording_thread = None  # Thread for audio recording
+audio_recording_thread = None  # Thread for audio recording
+video_recording_thread = None
 
 def record_audio(output_path):
     global is_recording, audio_frames
@@ -114,7 +115,7 @@ def show_video():
     cv2.destroyAllWindows()
 
 def stop_recording(out):
-    global is_recording, status_message
+    global is_recording, status_message, audio_recording_thread
     is_recording = False
     status_message = "Recording stopped, analyzing..."
     print("Recording stopped.")
@@ -126,31 +127,39 @@ def stop_recording(out):
         except Exception as e:
             print(f"Error releasing VideoWriter: {e}")
 
+    # Wait for audio thread to finish
+    if audio_recording_thread and audio_recording_thread.is_alive():
+        audio_recording_thread.join()
+        print("Audio recording thread finished.")
 
 def process_data(video_filename, audio_filename):
     global status_message, conversation_context
     print("Processing the recorded video and audio...")
     video_data = {"video_path": video_filename, "audio_output_path": audio_filename}
 
+    print(video_data)
     # Check if video file exists and is non-empty
     if not os.path.exists(video_filename) or os.path.getsize(video_filename) == 0:
         print(f"Error: Video file '{video_filename}' is missing or corrupted.")
         status_message = "Error: Video file is corrupted."
         return
+    if not os.path.exists(audio_filename) or os.path.getsize(audio_filename) == 0:
+        print(f"Error: Audio file '{audio_filename}' is missing or corrupted.")
+        status_message = "Error: Audio file is corrupted."
+        return
 
     try:
-        response, prompt = pipeline_step(conversation_context, video_data)
+        response, prompt, detected = pipeline_step(conversation_context, video_data)
         status_message = ""
-        print("Pipeline response:")
-        print(response)
-        conversation_context += f"\nPrompt: {prompt}"
-        conversation_context += f"\nResponse: {response}"
+        print(f"LLM response: {response}")
+        conversation_context += f"\nEmotions from audio: {detected[0]} and from video: {detected[1]} with audio transcription: {detected[2]}"
+        conversation_context += f"\nYour response: {response}"
     except Exception as e:
         print(f"Error during processing: {e}")
 
 
 def start_recording():
-    global is_recording, video_filename, audio_filename, status_message, start_time, recording_thread
+    global is_recording, video_filename, audio_filename, status_message, start_time, audio_recording_thread
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     video_filename = f"recorded_video_{timestamp}.mp4"
     audio_filename = f"recorded_audio_{timestamp}.wav"
@@ -158,8 +167,8 @@ def start_recording():
     is_recording = True
     status_message = "Recording..."
     start_time = datetime.now()
-    recording_thread = threading.Thread(target=record_audio, args=(audio_filename,))
-    recording_thread.start()
+    audio_recording_thread = threading.Thread(target=record_audio, args=(audio_filename,))
+    audio_recording_thread.start()
     print("Recording started...")
 
 def live_app():

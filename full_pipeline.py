@@ -28,41 +28,8 @@ videos = [
      "audio_output_path": "extracted_audio2.wav"}
 ]
 
-
-# Synchronization events
-audio_emotion_event = threading.Event()
-video_emotion_event = threading.Event()
-transcription_event = threading.Event()
-
-# Shared data for threads
-results = defaultdict(dict)
-
 def format_time():
     return datetime.now().strftime("%H:%M:%S.%f")[:-3]
-
-def extract_audio_emotion_thread(audio_path):
-    try:
-        print("Processing audio emotions: ", format_time())
-        results["audio_emotions"] = extract_emotion_from_audio(audio_path)
-    finally:
-        print("Audio processed: ", format_time())
-        audio_emotion_event.set()  # Signal completion
-
-def extract_video_emotion_thread(video_path):
-    try:
-        print("Processing video emotions: ", format_time())
-        results["video_emotions"] = extract_emotion_from_video(video_path)
-    finally:
-        print("Video processed: ", format_time())
-        video_emotion_event.set()  # Signal completion
-
-def transcribe_audio_thread(audio_path):
-    try:
-        print("Processing text: ", format_time())
-        results["transcription"] = get_transcription(audio_path)
-    finally:
-        print("Text processed: ", format_time())
-        transcription_event.set()  # Signal completion
 
 # Audio Extraction
 def extract_audio_from_video(video_path, output_path):
@@ -155,15 +122,45 @@ def feed_to_LLM(conversation_context, emotions_from_video, emotions_from_audio, 
 
 
 def pipeline_step(conversation_context, video):
+    def extract_audio_emotion_thread(audio_path, results):
+        try:
+            print("Processing audio emotions: ", format_time())
+            results["audio_emotions"] = extract_emotion_from_audio(audio_path)
+        finally:
+            print("Audio processed: ", format_time())
+            audio_emotion_event.set()  # Signal completion
+    def extract_video_emotion_thread(video_path, results):
+        try:
+            print("Processing video emotions: ", format_time())
+            results["video_emotions"] = extract_emotion_from_video(video_path)
+        finally:
+            print("Video processed: ", format_time())
+            video_emotion_event.set()  # Signal completion
+    def transcribe_audio_thread(audio_path, results):
+        try:
+            print("Processing text: ", format_time())
+            results["transcription"] = get_transcription(audio_path)
+        finally:
+            print("Text processed: ", format_time())
+            transcription_event.set()  # Signal completion
+
     video_path = video["video_path"]
     audio_output_path = video["audio_output_path"]
 
+
     print("Starting multithreaded processing...")
 
+    results = defaultdict(dict)
+
+    # Synchronization events
+    audio_emotion_event = threading.Event()
+    video_emotion_event = threading.Event()
+    transcription_event = threading.Event()
+
     # Start threads for each processing task
-    threading.Thread(target=extract_audio_emotion_thread, args=(audio_output_path,), daemon=True).start()
-    threading.Thread(target=extract_video_emotion_thread, args=(video_path,), daemon=True).start()
-    threading.Thread(target=transcribe_audio_thread, args=(audio_output_path,), daemon=True).start()
+    threading.Thread(target=extract_audio_emotion_thread, args=(audio_output_path, results), daemon=True).start()
+    threading.Thread(target=extract_video_emotion_thread, args=(video_path, results), daemon=True).start()
+    threading.Thread(target=transcribe_audio_thread, args=(audio_output_path, results), daemon=True).start()
 
     # Wait for all tasks to complete
     audio_emotion_event.wait()
@@ -177,9 +174,11 @@ def pipeline_step(conversation_context, video):
     video_emotions = results.get("video_emotions", [])
     transcription = results.get("transcription", "")
 
+    detected = [audio_emotions, video_emotions, transcription]
+
     # Interact with LLM
     response, prompt = feed_to_LLM(conversation_context, video_emotions, audio_emotions, transcription)
-    return response, prompt
+    return response, prompt, detected
 
 # def process_data(video_filename, audio_filename):
 #     global conversation_context
@@ -194,7 +193,7 @@ if __name__ == "__main__":
     # Main Workflow
     conversation_context = ""
     for video in videos:
-        response, prompt = pipeline_step(conversation_context, video)
+        response, prompt, detected = pipeline_step(conversation_context, video)
         print(f"LLM Response for Video:\n{response}")
-        conversation_context += f"\nPrompt: {prompt}"
+        conversation_context += f"\nEmotions from audio: {detected[0]} and from video: {detected[1]} with audio transcription: {detected[2]}"
         conversation_context += f"\nResponse: {response}"
