@@ -5,7 +5,7 @@ import sounddevice as sd
 import soundfile as sf
 import numpy as np
 from datetime import datetime, timedelta
-from full_pipeline import pipeline_step
+from full_pipeline import pipeline_step, update_conversation_context
 
 # Global Variables
 is_recording = False
@@ -151,9 +151,11 @@ def process_data(video_filename, audio_filename):
     try:
         response, prompt, detected = pipeline_step(conversation_context, video_data)
         status_message = ""
+        print(f"LLM prompt: {prompt}")
         print(f"LLM response: {response}")
-        conversation_context += f"\nEmotions from audio: {detected[0]} and from video: {detected[1]} with audio transcription: {detected[2]}"
-        conversation_context += f"\nYour response: {response}"
+        conversation_context = update_conversation_context(conversation_context, response, prompt, detected)
+
+        print("Pipeline FINISHED!\n")
     except Exception as e:
         print(f"Error during processing: {e}")
 
