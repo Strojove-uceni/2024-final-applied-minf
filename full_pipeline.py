@@ -1,9 +1,7 @@
 # Unified Emotion and Speech Processing Script
 
-import os
 from moviepy.editor import VideoFileClip
-from transformers import pipeline, AutoModelForAudioClassification, AutoProcessor, AutoModelForSpeechSeq2Seq
-from transformers import pipeline, AutoConfig,Wav2Vec2FeatureExtractor, AutoModelForAudioClassification, AutoFeatureExtractor
+from transformers import AutoConfig, Wav2Vec2FeatureExtractor, AutoModelForAudioClassification, AutoProcessor, AutoModelForSpeechSeq2Seq
 
 from deepface import DeepFace
 import librosa

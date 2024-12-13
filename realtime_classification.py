@@ -11,7 +11,6 @@ cap = cv2.VideoCapture(video_path)
 processor = AutoImageProcessor.from_pretrained("trpakov/vit-face-expression")
 model = AutoModelForImageClassification.from_pretrained("trpakov/vit-face-expression")
 
-# Check if the video file opened successfully
 if not cap.isOpened():
     print("Error: Could not open video file.")
 else:
