@@ -8,15 +8,64 @@ import numpy as np
 import openai
 import torch
 from collections import Counter
+from datetime import datetime
+import threading
+from collections import defaultdict
+
+
+import tensorflow as tf
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
+from transformers import logging
+logging.set_verbosity_error()  # Suppress all warnings
+import os
+# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress TensorFlow logs (Error = 3)
+
 
 
 # Video and audio paths
 videos = [
-    {"video_path": "recorded_video_20241209_190556.mp4",
-     "audio_output_path": "recorded_audio_20241209_190556.wav"},
     {"video_path": "/home/katka/PycharmProjects/2024-final-applied-minf/videos/My Response.mp4",
      "audio_output_path": "extracted_audio2.wav"}
 ]
+
+
+# Synchronization events
+audio_emotion_event = threading.Event()
+video_emotion_event = threading.Event()
+transcription_event = threading.Event()
+
+# Shared data for threads
+results = defaultdict(dict)
+
+def format_time():
+    return datetime.now().strftime("%H:%M:%S.%f")[:-3]
+
+def extract_audio_emotion_thread(audio_path):
+    try:
+        print("Processing audio emotions: ", format_time())
+        results["audio_emotions"] = extract_emotion_from_audio(audio_path)
+    finally:
+        print("Audio processed: ", format_time())
+        audio_emotion_event.set()  # Signal completion
+
+def extract_video_emotion_thread(video_path):
+    try:
+        print("Processing video emotions: ", format_time())
+        results["video_emotions"] = extract_emotion_from_video(video_path)
+    finally:
+        print("Video processed: ", format_time())
+        video_emotion_event.set()  # Signal completion
+
+def transcribe_audio_thread(audio_path):
+    try:
+        print("Processing text: ", format_time())
+        results["transcription"] = get_transcription(audio_path)
+    finally:
+        print("Text processed: ", format_time())
+        transcription_event.set()  # Signal completion
 
 # Audio Extraction
 def extract_audio_from_video(video_path, output_path):
@@ -107,21 +156,42 @@ def feed_to_LLM(conversation_context, emotions_from_video, emotions_from_audio, 
     response = send_chat_completion(prompt, model)
     return response, prompt
 
+
 def pipeline_step(conversation_context, video):
     video_path = video["video_path"]
     audio_output_path = video["audio_output_path"]
 
-    print(video_path)
-    print(audio_output_path)
+    print("Starting multithreaded processing...")
 
-    print(f"Processing video...")
-    # extract_audio_from_video(video_path, audio_output_path)
-    video_emotions = extract_emotion_from_video(video_path)
-    audio_emotions = extract_emotion_from_audio(audio_output_path)
-    transcription = get_transcription(audio_output_path)
+    # Start threads for each processing task
+    threading.Thread(target=extract_audio_emotion_thread, args=(audio_output_path,), daemon=True).start()
+    threading.Thread(target=extract_video_emotion_thread, args=(video_path,), daemon=True).start()
+    threading.Thread(target=transcribe_audio_thread, args=(audio_output_path,), daemon=True).start()
 
+    # Wait for all tasks to complete
+    audio_emotion_event.wait()
+    video_emotion_event.wait()
+    transcription_event.wait()
+
+    print("All tasks completed. Proceeding to LLM interaction...")
+
+    # Retrieve results
+    audio_emotions = results.get("audio_emotions", [])
+    video_emotions = results.get("video_emotions", [])
+    transcription = results.get("transcription", "")
+
+    # Interact with LLM
     response, prompt = feed_to_LLM(conversation_context, video_emotions, audio_emotions, transcription)
     return response, prompt
+
+# def process_data(video_filename, audio_filename):
+#     global conversation_context
+#     video_data = {"video_path": video_filename, "audio_output_path": audio_filename}
+#     response, prompt = pipeline_step_multithreaded(conversation_context, video_data)
+#     print(f"LLM Response:\n{response}")
+#     conversation_context += f"\nPrompt: {prompt}"
+#     conversation_context += f"\nResponse: {response}"
+
 
 if __name__ == "__main__":
     # Main Workflow
