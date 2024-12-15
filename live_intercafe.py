@@ -10,6 +10,8 @@ import torchaudio
 import ChatTTS
 from IPython.display import Audio
 from full_pipeline import pipeline_step
+import tkinter as tk
+from tkinter import messagebox
 
 # Global Variables
 is_recording = False
@@ -200,6 +202,7 @@ def process_data(video_filename, audio_filename):
 
         status_message = "Getting voice response..."
         generate_audio(text_to_speech_model, response+"[uv_break]")
+
         status_message = "Press S to continue recording"
         print("Pipeline FINISHED!\n")
     except Exception as e:
@@ -247,9 +250,25 @@ def initialize_audio_model():
 
     return text_to_speech_model
 
+def show_response_popup(response_text):
+    # Create a new Tkinter root window
+    root = tk.Tk()
+    root.withdraw()  # Hide the main window
+
+    # Display the popup message box with the response text
+    messagebox.showinfo("LLM Response", response_text)
+
+    # Destroy the root window after the popup is closed
+    root.destroy()
+
 def generate_audio(text_to_speech_model, texts):
     """Generate and play audio from the provided text inputs using the ChatTTS model."""
+    # Display a popup window with the response text
+
     wavs = text_to_speech_model.infer(texts, params_infer_code=params_infer_code)
+
+    threading.Thread(target=show_response_popup, args=(texts.split("[")[0],)).start()
+
     for i, wav in enumerate(wavs):
         # Convert to numpy array and play audio
         audio_array = np.array(wav, dtype=np.float32)
