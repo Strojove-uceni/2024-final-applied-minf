@@ -1,7 +1,8 @@
 import os
 import numpy as np
 from moviepy.editor import VideoFileClip
-from transformers import AutoConfig, Wav2Vec2FeatureExtractor, AutoModelForAudioClassification, AutoProcessor, AutoModelForSpeechSeq2Seq
+from transformers import AutoConfig, AutoProcessor, AutoModelForAudioClassification, AutoModelForSpeechSeq2Seq, Wav2Vec2FeatureExtractor
+
 from deepface import DeepFace
 import librosa
 import openai
@@ -188,11 +189,11 @@ def pipeline_step(conversation_context, video):
     return response, prompt, detected
 
 
-# if __name__ == "__main__":
-#     # Main Workflow
-#     conversation_context = ""
-#     for video in videos:
-#         response, prompt, detected = pipeline_step(conversation_context, video)
-#         print(f"LLM")
-#         print(f"LLM Response:\n{response}")
-#         conversation_context = update_conversation_context(conversation_context, response, prompt, detected)
+if __name__ == "__main__":
+    # Main Workflow
+    conversation_context = ""
+    for video in videos:
+        response, prompt, detected = pipeline_step(conversation_context, video)
+        print(f"LLM")
+        print(f"LLM Response:\n{response}")
+        conversation_context = update_conversation_context(conversation_context, response, prompt, detected)
