@@ -4,7 +4,7 @@ from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 import librosa
 
 # Define the path to the video file
-video_path = "/home/katka/PycharmProjects/2024-final-applied-minf/videos/So Sorry.mp4"
+video_path = "/videos/So Sorry.mp4"
 
 # Load the first 20 seconds of audio from the video file
 try:
