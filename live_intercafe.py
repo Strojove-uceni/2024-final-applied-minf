@@ -9,11 +9,11 @@ import torch
 import torchaudio
 import ChatTTS
 from IPython.display import Audio
-from full_pipeline import pipeline_step, update_conversation_context
+from full_pipeline import pipeline_step
 
 # Global Variables
 is_recording = False
-conversation_context = ""
+messages = []
 video_filename = None
 audio_filename = None
 status_message = "Press S and start talking"  # Message to display on the OpenCV window
@@ -102,12 +102,12 @@ def show_video():
 
             # Display elapsed time and limit in the bottom-right corner
             time_text = f"{int(elapsed_time)}s/{recording_limit}s"
-            cv2.putText(frame, time_text, (frame.shape[1] - 200, frame.shape[0] - 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+            text_x = frame.shape[1] - 200
+            text_y = frame.shape[0] - 20
+            cv2.putText(frame, time_text, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
 
         # Display status message on the video feed
         if show_instructions:
-            cv2.putText(frame, status_message, (10, 230), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
-
             overlay = frame.copy()
             alpha = 0.6  # Transparency factor
             cv2.rectangle(overlay, (10, 10), (500, 200), (0, 0, 0), -1)
@@ -118,9 +118,21 @@ def show_video():
                 font_thickness = 2 if i == 0 else 1
                 color = (255, 255, 255) if i == 0 else (200, 200, 200)
                 cv2.putText(frame, line, (20, y_start + i * 30), cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, font_thickness, cv2.LINE_AA)
-        else:
-            if status_message:
-                cv2.putText(frame, status_message, (10, 230), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+
+        if status_message:
+            overlay = frame.copy()
+            alpha = 0.6  # Transparency for the status message background
+            text_size = cv2.getTextSize(status_message, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
+            text_x = 10
+            text_y = frame.shape[0] - 20
+            background_end_x = text_x + text_size[0] + 20
+            background_start_y = text_y - text_size[1] - 10
+            background_end_y = text_y + 10
+            cv2.rectangle(overlay, (text_x, background_start_y), (background_end_x, background_end_y), (0, 0, 0),
+                          -1)
+            cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
+            cv2.putText(frame, status_message, (text_x + 10, text_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255),
+                        2, cv2.LINE_AA)
         cv2.imshow('Webcam', frame)
 
         key = cv2.waitKey(1) & 0xFF
@@ -166,7 +178,7 @@ def stop_recording(out):
         print("Audio recording thread finished.")
 
 def process_data(video_filename, audio_filename):
-    global status_message, conversation_context
+    global status_message, conversation_context, messages
     print("Processing the recorded video and audio...")
     video_data = {"video_path": video_filename, "audio_output_path": audio_filename}
 
@@ -182,12 +194,11 @@ def process_data(video_filename, audio_filename):
         return
 
     try:
-        response, prompt, detected = pipeline_step(conversation_context, video_data)
+        response, prompt, detected, messages = pipeline_step(messages, video_data)
         print(f"LLM prompt: {prompt}")
         print(f"LLM response: {response}")
-        conversation_context = update_conversation_context(conversation_context, response, prompt, detected)
 
-        status_message = "Generating voice response..."
+        status_message = "Getting voice response..."
         generate_audio(text_to_speech_model, response+"[uv_break]")
         status_message = "Press S to continue recording"
         print("Pipeline FINISHED!\n")

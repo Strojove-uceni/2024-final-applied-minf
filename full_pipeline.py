@@ -26,7 +26,6 @@ logging.set_verbosity_error()  # Suppress all warnings
 videos = [
     {'video_path': 'recorded_video_20241215_201518.mp4', 'audio_output_path': 'recorded_audio_20241215_201518.wav'}
 ]
-messages = []
 previous_answer = ''
 
 def extract_audio_from_video(video_path, output_path):
@@ -83,11 +82,6 @@ def get_transcription(audio_path):
 
 
 # LLM INTERACTION
-def update_conversation_context(conversation_context, response, prompt, detected):
-    conversation_context += f"\nPrevious audio transcription: {detected[2]}"
-    conversation_context += f"\nPrevious response: {response}"
-
-    return conversation_context
 
 # def generate_prompt(conversation_context, emotions_from_video, emotions_from_audio, transcription):
 #     prompt = f"""
@@ -107,37 +101,43 @@ def update_conversation_context(conversation_context, response, prompt, detected
 #         """
 #     return prompt
 
-def generate_prompt(emotions_from_video, emotions_from_audio, transcription):
+def generate_prompt(transcription):
     prompt = f"""
-    Answer as a psychologist based on these emotions detected:
-    Observed emotions from video analysis: {emotions_from_video}
-    Detected emotions from audio analysis: {emotions_from_audio}
-    React to this text: {transcription}
+    {transcription}
     """
     return prompt
 
-def update_messages(messages, prompt, previous_answer):
+def update_messages(messages, prompt, detected_emotions, previous_answer):
     if len(messages) == 0:
         messages = [
             {
-            "role": "system",
-            "content": "You are a psychologist answering questions and providing advice. Keep your response focused, no longer than two sentences, and ensure it addresses both the emotional and practical aspects."
+                "role": "system",
+                "content": "You are a psychologist answering questions and providing advice. Keep your response focused, no longer than two sentences, and ensure it addresses both the emotional and practical aspects."
+            },
+            {
+                "role": "system",
+                "content": f"detected emotions from audio and video stream: {', '.join(detected_emotions)}"
             },
             {
                 "role": "user",
-                "content": [{"type": "text", "text": prompt}]
-            },
-            ]
+                "content": prompt
+            }
+        ]
     else:
         messages.append(
             {
                 "role": "assistant",
-                "content": [{"type": "text", "text": previous_answer}]
-            },
-            {
-                "role": "user",
-                "content": [{"type": "text", "text": prompt}]
-            },)
+                "content": previous_answer
+            }
+        )
+        messages.append({
+            "role": "system",
+            "content": f"detected emotions: {', '.join(detected_emotions)}"
+        })
+        messages.append({
+            "role": "user",
+            "content": prompt
+        })
     return messages
 
 def send_chat_completion(messages, model="llama-3.2-1b-instruct", temperature=0.7):
@@ -159,14 +159,14 @@ def feed_to_LLM(messages, emotions_from_video, emotions_from_audio, transcriptio
     openai.api_key = "lm-studio"
     model = "llama-3.2-1b-instruct"
 
-    prompt = generate_prompt(emotions_from_video, emotions_from_audio, transcription)
+    prompt = generate_prompt(transcription)
 
-    messages = update_messages(messages, prompt, previous_answer)
+    messages = update_messages(messages, prompt, emotions_from_audio + emotions_from_video, previous_answer)
     response = send_chat_completion(messages, model)
     previous_answer = response
-    return response, prompt
+    return response, prompt, messages
 
-def pipeline_step(conversation_context, video):
+def pipeline_step(messages, video):
     def format_time():
         return datetime.now().strftime("%H:%M:%S.%f")[:-3]
     def extract_audio_emotion_thread(audio_path, results):
@@ -223,16 +223,17 @@ def pipeline_step(conversation_context, video):
     detected = [audio_emotions, video_emotions, transcription]
 
     # Interact with LLM
-    response, prompt = feed_to_LLM(conversation_context, video_emotions, audio_emotions, transcription)
+    response, prompt, messages = feed_to_LLM(messages, video_emotions, audio_emotions, transcription)
+    for item in messages: print(item)
     print("LLM response generated!")
-    return response, prompt, detected
+    return response, prompt, detected, messages
 
 
 if __name__ == "__main__":
     # Main Workflow
-    conversation_context = ""
+    messages = []
     for video in videos:
-        response, prompt, detected = pipeline_step(conversation_context, video)
+        response, prompt, detected, messages = pipeline_step(messages, video)
         print(f"LLM")
         print(f"LLM Response:\n{response}")
-        conversation_context = update_conversation_context(conversation_context, response, prompt, detected)
+        # conversation_context = update_conversation_context(conversation_context, response, prompt, detected)
