@@ -30,6 +30,7 @@ audio_recording_thread = None  # Thread for audio recording
 video_recording_thread = None
 
 text_to_speech_model = None
+params_infer_code = None
 
 def record_audio(output_path):
     global is_recording, audio_frames
@@ -56,6 +57,17 @@ def show_video():
 
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = None
+    show_instructions = True  # Flag to control the display of instructions
+    # Instruction message to display
+    instructions = [
+        "Welcome to AI Therapy!",
+        "Please ensure the following:",
+        "1. Quiet environment",
+        "2. Good lighting",
+        "3. Stable device position",
+        "4. Privacy for comfort"
+    ]
+    initialize_audio_model()
 
     while True:
         ret, frame = cap.read()
@@ -93,9 +105,22 @@ def show_video():
             cv2.putText(frame, time_text, (frame.shape[1] - 200, frame.shape[0] - 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
 
         # Display status message on the video feed
-        if status_message:
-            cv2.putText(frame, status_message, (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+        if show_instructions:
+            cv2.putText(frame, status_message, (10, 230), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
 
+            overlay = frame.copy()
+            alpha = 0.6  # Transparency factor
+            cv2.rectangle(overlay, (10, 10), (500, 200), (0, 0, 0), -1)
+            cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
+            y_start = 40
+            for i, line in enumerate(instructions):
+                font_scale = 0.8 if i == 0 else 0.7
+                font_thickness = 2 if i == 0 else 1
+                color = (255, 255, 255) if i == 0 else (200, 200, 200)
+                cv2.putText(frame, line, (20, y_start + i * 30), cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, font_thickness, cv2.LINE_AA)
+        else:
+            if status_message:
+                cv2.putText(frame, status_message, (10, 230), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
         cv2.imshow('Webcam', frame)
 
         key = cv2.waitKey(1) & 0xFF
@@ -106,6 +131,8 @@ def show_video():
                 process_data_thread = threading.Thread(target=process_data, args=(video_filename, audio_filename))
                 process_data_thread.start()
             else:
+                if show_instructions:
+                    show_instructions = False  # Disable instructions after the first "S" press
                 start_recording()
         elif key == ord('q'):
             break
@@ -156,11 +183,11 @@ def process_data(video_filename, audio_filename):
 
     try:
         response, prompt, detected = pipeline_step(conversation_context, video_data)
-        status_message = ""
+        status_message = "Press S to continue recording"
         print(f"LLM prompt: {prompt}")
         print(f"LLM response: {response}")
         conversation_context = update_conversation_context(conversation_context, response, prompt, detected)
-        generate_audio(text_to_speech_model, response)
+        generate_audio(text_to_speech_model, response+"[uv_break]")
         print("Pipeline FINISHED!\n")
     except Exception as e:
         print(f"Error during processing: {e}")
@@ -171,7 +198,6 @@ def start_recording():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     video_filename = f"recorded_video_{timestamp}.mp4"
     audio_filename = f"recorded_audio_{timestamp}.wav"
-    initialize_audio_model()
     is_recording = True
     status_message = "Recording..."
     start_time = datetime.now()
@@ -187,19 +213,30 @@ def live_app():
 
 def initialize_audio_model():
     """Initialize the ChatTTS model and return the loaded model instance."""
-    global text_to_speech_model
+    global text_to_speech_model, params_infer_code
     if text_to_speech_model is None:
+        
         torch._dynamo.config.cache_size_limit = 64
         torch._dynamo.config.suppress_errors = True
         torch.set_float32_matmul_precision('high')
 
         text_to_speech_model = ChatTTS.Chat()
         text_to_speech_model.load(compile=False)  # Set to True for better performance
+        # rand_spk = text_to_speech_model.sample_random_speaker()
+        rand_spk = "蘁淰救欀嚤廝玄敹撑纋窯娺楛砨芨舓蔤礈磮仃乶磍珔緒瓳蘷旪藫促賅膅浠妁廖双测職茧籙氁塙蜺疽噍煏浏熊牂槿啸澼蟎憊甏睢僬稲嘘僛祜君嬐琶癷暩叩嗅硰俦煋廞坐壞臤完堣倳幨彮玠瓹蒈趒慆夁膰淍偿掺晐妹琷簝贎旇圔塈泐孯匬嶅豦欨腿莒蒵嗁榁绤卒皾漄欢呏糤澡粖橉濫歈舘萳刵咔瑽珔妜蠻壑濝滤寐俶膜缅巛噧卬浉諭趝范挌葔潓埚虚刅庸烓専糴衼超侈萢慸惃癭笈珔媚衃藳虒縍幯蜂纷細瞋撊囚欋懛揎橻磂涭癃壷慸瘼僘赘仚贒嬹棨悂巵葭墴疺虈缈燻巗碢谚枘膚蛖痧忲篵忼虎慰蔏橑話悫瑹秩胕乄摾嚼嗀肍兔凹澿枑乥姖杊编羆瘆蓴岌漨监莯暇炶挹掉檏圙拡澪纴膐巍菎暾渔攣稵蓏萠炇但賌傱秱檷朗癸蔛樖檷笆烡扺芗勧偨賹謩姒潴癸穧扵恵愽座糧曋慩粂肸奙壥嗢咹识湛犜绶勬趼摱妟拫縒暕粉湇宮仃攏仝堣劔嗷炆粱堒厈硺奩呌望耋狾摹曥欃蕤性擢琣諃張氃舃援质羀裬痗蕑獣贸湀綡牼寫痨狥峩傽蝗勼狹篧秧岛塦紉捎尦譶燖謷桴稻哵溰挌瞀夰墷廟豯槦嬊摻杗省扵琶胷葈瘉汀螱涣桤诟唺汦秇時詨臭姈录跧祍拁埈灞猜枪貸莹贁纪殫谓竾名玎贕朽槣聢琭安勱繤媼勶墅姰瑑询崺碅梅忭扎灕摿坺喜謚蚊態民贒芒柍蚿暉掮婈媁碥憼秱烈榅殰箒煄桞纏滔苕傍史硒笤畷征嶬抳虀脩絮榋殊窪岂呚内劗爆盡棐糾栀蛦疰谗憏傕牣穩椱勝噒咱犉烁跃渍倩蚰崁吢若育垥緌丟粯衈泷塆弍畮癔什娪玺卉蝙皡偫貝俋樱萢俜縥渞炾栰翪稕旧嚎戲蒨崳虀倻垉沒敮栄胱繆蠇惓蒌美菮喆丶縱秲総旲友墶謮覧芡編嘿岵烹晪桀傲禄姸搴品旨烗堭娗惀弘岆士嬅烗病噅覘縙窅繋洲丄挏焛咐瀕瑣胳趫窣窴噊櫱袒蠯弥楷溢肛栲胊畔夅蟸楪巔篇簎厱孋甩牿壿籮舭豕蒫彧絰罡袔艨懻悞粐蛼疲訅搗柒冚琏丸脒桃翽絺衯蛿螃趭冮瓕孉懎柂覺仓氮欃啒籛歟潜弸歋汯椹哈揤淪哔岼臋傁暲妳剜琒墆溕剆蠸妹弦握嘑綶袥赜補烅跧書獇嘝嗃崅娶乒欥昴豂机的幔夐亝奓谻峖炁傍笺嫗哪欠卢柟籷暕窣膲朥瞷洣譿僋氝嚪汔綟硎牷昢殁滯屷姩拳伝牡蚗笿乏甲妺窮苤竿穫秌葕糔減桁夈穎檀甘綰瘠蔩浨敤癜屏蘧狴蛘思憘衚繓廂虶芐湍穫俘嘈窘伕萶厩編嶵殞姜礂肋娗喃筚牎痌羦皼葠栩枒唶虣袲脒臽娺膽縒盙忔耻啙篝硃办摘欌劷梃呣浶瀝曗埢毘紒蜹藀张嶝梱份螾妚夕千觕峜螧夠捉禵卬枏茰汇紂栀缣礓氃褛幪琭槛晰縚泳褸亙繘刀一㴂"
+        # print(rand_spk) # save it for later timbre recovery
+        params_infer_code = ChatTTS.Chat.InferCodeParams(
+            spk_emb = rand_spk, # add sampled speaker 
+            temperature = .3,   # using custom temperature
+            top_P = 0.7,        # top P decode
+            top_K = 20,         # top K decode
+        )
+
     return text_to_speech_model
 
 def generate_audio(text_to_speech_model, texts):
     """Generate and play audio from the provided text inputs using the ChatTTS model."""
-    wavs = text_to_speech_model.infer(texts)
+    wavs = text_to_speech_model.infer(texts, params_infer_code=params_infer_code)
     for i, wav in enumerate(wavs):
         # Convert to numpy array and play audio
         audio_array = np.array(wav, dtype=np.float32)
