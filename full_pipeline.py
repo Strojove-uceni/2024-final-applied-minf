@@ -24,9 +24,10 @@ logging.set_verbosity_error()  # Suppress all warnings
 
 # Video and audio paths
 videos = [
-    {"video_path": "/home/katka/PycharmProjects/2024-final-applied-minf/videos/My Response.mp4",
-     "audio_output_path": "extracted_audio2.wav"}
+    {'video_path': 'recorded_video_20241215_201518.mp4', 'audio_output_path': 'recorded_audio_20241215_201518.wav'}
 ]
+messages = []
+previous_answer = ''
 
 def extract_audio_from_video(video_path, output_path):
     try:
@@ -83,32 +84,67 @@ def get_transcription(audio_path):
 
 # LLM INTERACTION
 def update_conversation_context(conversation_context, response, prompt, detected):
-    conversation_context += f"\nEmotions from audio: {detected[0]} and from video: {detected[1]} with audio transcription: {detected[2]}"
-    conversation_context += f"\nResponse: {response}"
+    conversation_context += f"\nPrevious audio transcription: {detected[2]}"
+    conversation_context += f"\nPrevious response: {response}"
 
     return conversation_context
 
-def generate_prompt(conversation_context, emotions_from_video, emotions_from_audio, transcription):
+# def generate_prompt(conversation_context, emotions_from_video, emotions_from_audio, transcription):
+#     prompt = f"""
+#         You are a psychologist analyzing a person's emotional and verbal state. Based on the following context from previous conversations and new information:
+#         Context:
+#         {conversation_context}
+#
+#         New Information:
+#         - Observed emotions from video analysis: {emotions_from_video}
+#         - Detected emotions from audio analysis: {emotions_from_audio}
+#         - Transcription of their spoken words: "{transcription}"
+#
+#         Provide a compassionate and thoughtful response or answer to the last spoken words.
+#         Pay closer attention to spoken words than the detected emotions.
+#         The response should be no longer than two sentences of spoken word and should only contain the spoken
+#         sentence without additional commentary.
+#         """
+#     return prompt
+
+def generate_prompt(emotions_from_video, emotions_from_audio, transcription):
     prompt = f"""
-        You are a psychologist analyzing a person's emotional and verbal state. Based on the following context and new information:
-        Context:
-        {conversation_context}
-
-        New Information:
-        - Observed emotions from video analysis: {emotions_from_video}
-        - Detected emotions from audio analysis: {emotions_from_audio}
-        - Transcription of their spoken words: "{transcription}"
-
-        Provide a compassionate and thoughtful response, offering insights and guidance. 
-        The response should be no longer than two sentences of spoken word.
-        """
+    Answer as a psychologist based on these emotions detected:
+    Observed emotions from video analysis: {emotions_from_video}
+    Detected emotions from audio analysis: {emotions_from_audio}
+    React to this text: {transcription}
+    """
     return prompt
 
-def send_chat_completion(prompt, model="llama-3.2-1b-instruct", temperature=0.7):
+def update_messages(messages, prompt, previous_answer):
+    if len(messages) == 0:
+        messages = [
+            {
+            "role": "system",
+            "content": "You are a psychologist answering questions and providing advice. Keep your response focused, no longer than two sentences, and ensure it addresses both the emotional and practical aspects."
+            },
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": prompt}]
+            },
+            ]
+    else:
+        messages.append(
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": previous_answer}]
+            },
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": prompt}]
+            },)
+    return messages
+
+def send_chat_completion(messages, model="llama-3.2-1b-instruct", temperature=0.7):
     try:
         response = openai.ChatCompletion.create(
             model=model,
-            messages=[{"role": "user", "content": prompt}],
+            messages=messages,
             temperature=temperature
         )
         return response['choices'][0]['message']['content']
@@ -117,14 +153,17 @@ def send_chat_completion(prompt, model="llama-3.2-1b-instruct", temperature=0.7)
         return "I'm here for you."
 
 # LLM Interaction
-def feed_to_LLM(conversation_context, emotions_from_video, emotions_from_audio, transcription):
+def feed_to_LLM(messages, emotions_from_video, emotions_from_audio, transcription):
+    global previous_answer
     openai.api_base = "http://localhost:1234/v1"
     openai.api_key = "lm-studio"
     model = "llama-3.2-1b-instruct"
 
-    prompt = generate_prompt(conversation_context, emotions_from_video, emotions_from_audio, transcription)
+    prompt = generate_prompt(emotions_from_video, emotions_from_audio, transcription)
 
-    response = send_chat_completion(prompt, model)
+    messages = update_messages(messages, prompt, previous_answer)
+    response = send_chat_completion(messages, model)
+    previous_answer = response
     return response, prompt
 
 def pipeline_step(conversation_context, video):

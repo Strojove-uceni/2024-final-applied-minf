@@ -183,11 +183,13 @@ def process_data(video_filename, audio_filename):
 
     try:
         response, prompt, detected = pipeline_step(conversation_context, video_data)
-        status_message = "Press S to continue recording"
         print(f"LLM prompt: {prompt}")
         print(f"LLM response: {response}")
         conversation_context = update_conversation_context(conversation_context, response, prompt, detected)
+
+        status_message = "Generating voice response..."
         generate_audio(text_to_speech_model, response+"[uv_break]")
+        status_message = "Press S to continue recording"
         print("Pipeline FINISHED!\n")
     except Exception as e:
         print(f"Error during processing: {e}")
